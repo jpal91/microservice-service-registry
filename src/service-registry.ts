@@ -25,10 +25,9 @@ class ServiceRegistry {
     // but of a different service type.
     // Otherwise we assume the same service is attempting to re-register
     if (service.type && service.type !== type) {
-      this.log.error(
-        `Service of type '${service.type}' already exists at IP: ${ip}, Port: ${port}`,
-      );
-      throw new Error();
+      const message = `Request to register service '${type} but service of type '${service.type}' already exists at IP: ${ip}, Port: ${port}`;
+      this.log.error(message);
+      throw new Error(message);
     }
 
     const now = Date.now();
