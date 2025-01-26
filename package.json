@@ -1,10 +1,11 @@
 {
-	"devDependencies": {
-		"@tsconfig/node22": "^22.0.0",
-		"@types/express": "^5.0.0",
-		"typescript": "^5.7.3"
-	},
-	"dependencies": {
-		"express": "^4.21.2"
-	}
+  "devDependencies": {
+    "@tsconfig/node22": "^22.0.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.10",
+    "typescript": "^5.7.3"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
 }
