@@ -37,7 +37,7 @@ export interface Instance {
 
 export type InstanceRegisterRequest = Pick<
   Instance,
-  "serviceType" | "host" | "port" | "meta"
+  "serviceType" | "port" | "meta"
 >;
 
 /**
@@ -282,7 +282,7 @@ class ServiceRegistry<
    * @param instance - New instance data
    * @fires instanceRegistered
    */
-  register(instance: InstanceRegisterRequest) {
+  register(instance: InstanceRegisterRequest & { host: string }) {
     if (this.disposed) {
       throw new Error("ServiceRegistry has been disposed");
     }
@@ -328,7 +328,14 @@ class ServiceRegistry<
    */
   getInstancesByType(serviceType: string) {
     const services = this.serviceMap.get(serviceType);
-    return Array.from(services ?? []).map((id) => this.instanceMap.get(id));
+
+    if (!services) {
+      throw new Error(`No services of type '${serviceType}' exist`);
+    }
+
+    return Array.from(services ?? []).map(
+      (id) => this.instanceMap.get(id) as Instance,
+    );
   }
 
   /* HEALTH CHECKS */

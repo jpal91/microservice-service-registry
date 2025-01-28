@@ -2,11 +2,16 @@
   "devDependencies": {
     "@tsconfig/node22": "^22.0.0",
     "@types/express": "^5.0.0",
+    "@types/morgan": "^1.9.9",
     "@types/node": "^22.10.10",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   },
   "dependencies": {
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "express-validator": "^7.2.1",
+    "helmet": "^8.0.0",
+    "morgan": "^1.10.0"
   }
 }
