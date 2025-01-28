@@ -1,4 +1,4 @@
-import { randomUUID, UUID } from "node:crypto";
+import { randomUUID, UUID, randomBytes } from "node:crypto";
 import EventEmitter from "node:events";
 
 type LoggerMethod = (...args: any[]) => void;
@@ -26,6 +26,7 @@ interface Logger {
  */
 export interface Instance {
   id: UUID;
+  token: string;
   serviceType: string;
   host: string;
   port: string;
@@ -108,6 +109,12 @@ export interface ServiceRegistryOptions {
   logger?: Logger;
 }
 
+export class AuthenticationError extends Error {
+  constructor(message?: string) {
+    super(message);
+  }
+}
+
 /**
  * ServiceRegistry manages a collection of microservice instances, tracking their status and health.
  * It provides registration, health checking, and lookup capabilities for distributed services.
@@ -154,6 +161,7 @@ class ServiceRegistry<
   healthCheckTimeout: NodeJS.Timeout | undefined;
 
   private disposed = false;
+  private registrationKey: string;
 
   /**
    *
@@ -172,6 +180,12 @@ class ServiceRegistry<
     this.healthCheckInterval = opts?.healthCheckInterval ?? 5000;
     this.healthCheckMaxRequests = opts?.healthCheckMaxRequests ?? 10;
     this.healthCheckTTL = opts?.healthCheckTTL ?? 2000;
+
+    this.registrationKey = process.env.SERVICE_REGISTRATION_KEY || "";
+
+    if (!this.registrationKey) {
+      throw new Error("SERVICE_REGISTRATION_KEY must be set in .env");
+    }
 
     this.init();
     this.setupShutdownHandlers();
@@ -277,28 +291,42 @@ class ServiceRegistry<
     });
   }
 
+  private generateInstanceToken() {
+    // Generate unique token for registered instance
+    return randomBytes(32).toString("hex");
+  }
+
   /**
    * Takes a request for a new instance to be registered and adds to internal database
    * @param instance - New instance data
    * @fires instanceRegistered
    */
-  register(instance: InstanceRegisterRequest & { host: string }) {
+  register(
+    instance: InstanceRegisterRequest & { host: string },
+    registrationKey: string,
+  ) {
     if (this.disposed) {
       throw new Error("ServiceRegistry has been disposed");
     }
 
+    if (registrationKey !== this.registrationKey) {
+      throw new AuthenticationError("Registration key does not match");
+    }
+
     const id = randomUUID();
+    const token = this.generateInstanceToken();
 
     const newInstance: Instance = {
       ...instance,
       id,
+      token,
       healthy: true,
       created: Date.now(),
       lastUpdated: Date.now(),
     };
 
     this.emit("instanceRegistered", newInstance);
-    return id;
+    return { serviceId: id, token };
   }
 
   /**
@@ -336,6 +364,11 @@ class ServiceRegistry<
     return Array.from(services ?? []).map(
       (id) => this.instanceMap.get(id) as Instance,
     );
+  }
+
+  validateInstanceAuth(id: string, token: string) {
+    const instance = this.instanceMap.get(id);
+    return instance?.token === token;
   }
 
   /* HEALTH CHECKS */

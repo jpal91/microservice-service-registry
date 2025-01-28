@@ -1,68 +1,33 @@
-import express, { type Request, type Response } from "express";
+import express, {
+  type Request,
+  type Response,
+  type NextFunction,
+} from "express";
 import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import { body, validationResult } from "express-validator";
 
 import ServiceRegistry, {
+  AuthenticationError,
   type InstanceRegisterRequest,
 } from "./service-registry";
-
-interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  timestamp: number;
-}
-
-const sendResponse = <T>(
-  res: Response,
-  status: number,
-  data?: T,
-  error?: string,
-) => {
-  const response: ApiResponse<T> = {
-    success: !error,
-    timestamp: Date.now(),
-    ...(data && { data }),
-    ...(error && { error }),
-  };
-
-  res.status(status).json(response);
-};
+import {
+  sendResponse,
+  authenticateAdmin,
+  authenticateService as _as,
+  helmetOpts,
+} from "./middleware";
 
 const app = express();
+const port = process.env.PORT || 3002;
+const registry = new ServiceRegistry();
+
+const authenticateService = _as(registry);
 
 app.use(morgan("combined"));
 app.use(express.json());
-app.use(
-  helmet({
-    // Since this is an API, we can disable CSP
-    contentSecurityPolicy: false,
-
-    // Allow cross-origin requests
-    crossOriginResourcePolicy: { policy: "cross-origin" },
-
-    // Enable HSTS
-    hsts: {
-      maxAge: 31536000,
-      includeSubDomains: true,
-      preload: true,
-    },
-
-    // Prevent frame embedding
-    frameguard: {
-      action: "deny",
-    },
-
-    // Keep these enabled for basic security
-    noSniff: true,
-    dnsPrefetchControl: true,
-  }),
-);
-
-const port = process.env.PORT || 3002;
-const registry = new ServiceRegistry();
+app.use(helmet(helmetOpts));
 
 app.get("/", (_: Request, res: Response) => {
   res.send("Registry active");
@@ -73,10 +38,20 @@ const validateRegistration = [
   body("port").notEmpty().isNumeric(),
 ];
 
+// Register new service
 app.post(
   "/register",
   validateRegistration,
   (req: Request<{}, any, InstanceRegisterRequest>, res: Response) => {
+    const authHeader = req.headers.authorization;
+    const registrationKey = authHeader?.startsWith("Bearer ")
+      ? authHeader.substring(7)
+      : null;
+
+    if (!registrationKey) {
+      return sendResponse(res, 401, null, "Missing registration key");
+    }
+
     const errors = validationResult(req);
 
     if (!errors.isEmpty()) {
@@ -87,12 +62,15 @@ app.post(
     const host = req.hostname;
 
     try {
-      const registeredInstance = registry.register({ ...requestBody, host });
-      sendResponse(res, 201, { serviceId: registeredInstance });
+      const { serviceId, token } = registry.register(
+        { ...requestBody, host },
+        registrationKey,
+      );
+      sendResponse(res, 201, { serviceId, token });
     } catch (e) {
       sendResponse(
         res,
-        503,
+        e instanceof AuthenticationError ? 401 : 503,
         null,
         e instanceof Error ? e.message : "Unknown error occurred",
       );
@@ -100,8 +78,10 @@ app.post(
   },
 );
 
+// Get all services by service name
 app.get(
   "/services/:serviceName",
+  authenticateService,
   (req: Request<{ serviceName: string }>, res: Response) => {
     const { serviceName } = req.params;
 
@@ -119,27 +99,54 @@ app.get(
   },
 );
 
-app.get("/service/:id", (req: Request<{ id: string }>, res: Response) => {
-  const { id } = req.params;
+// Get a service by id
+app.get(
+  "/service/:id",
+  authenticateService,
+  (req: Request<{ id: string }>, res: Response) => {
+    const { id } = req.params;
 
-  const instance = registry.getInstanceById(id);
-  sendResponse(res, 200, instance);
+    const instance = registry.getInstanceById(id);
+    sendResponse(res, 200, instance);
+  },
+);
+
+// Unregister a service
+app.delete(
+  "/service/:id",
+  authenticateService,
+  (req: Request<{ id: string }>, res: Response) => {
+    const { id } = req.params;
+
+    registry.unregister(id);
+    sendResponse(res, 200, { serviceId: id });
+  },
+);
+
+const adminRouter = express.Router();
+app.use("/admin", authenticateAdmin, adminRouter);
+
+// Shut down service registry instance
+adminRouter.post("/shutdown", (req: Request, res: Response) => {
+  try {
+    registry.dispose();
+    server.close(() => {
+      console.info("Server closed");
+      process.exit(0);
+    });
+
+    setTimeout(() => {
+      console.error("Forced shutdown after timeout");
+      process.exit(1);
+    }, 10000);
+  } catch (error) {
+    console.error("Error during shutdown", error);
+    process.exit(1);
+  }
 });
 
-app.delete("/service/:id", (req: Request<{ id: string }>, res: Response) => {
-  const { id } = req.params;
-
-  registry.unregister(id);
-  sendResponse(res, 200, { serviceId: id });
-});
-
-// app.delete("/", (_: Request, res: Response) => {
-//   registry.dispose();
-//   sendResponse(res, 200, "Shut down complete");
-//   process.exit(0);
-// });
-
-app.get("/health", (req: Request, res: Response) => {
+// Check health of service registry
+adminRouter.get("/health", (req: Request, res: Response) => {
   sendResponse(res, 200, {
     status: "UP",
     timestamp: Date.now(),
@@ -148,6 +155,6 @@ app.get("/health", (req: Request, res: Response) => {
   });
 });
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`Service registry listening on port ${port}`);
 });
