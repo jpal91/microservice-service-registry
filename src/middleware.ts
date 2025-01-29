@@ -52,7 +52,7 @@ export const authenticateService = (registry: ServiceRegistry) => {
         serviceToken as string,
       )
     ) {
-      return sendResponse(res, 401, "Invalid authentication credentials");
+      return sendResponse(res, 401, null, "Invalid authentication credentials");
     }
 
     next();
