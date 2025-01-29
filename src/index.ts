@@ -9,9 +9,12 @@ const server = app.listen(port, () => {
   console.log(`Service registry listening on port ${port}`);
 });
 
-process.on("SIGTERM", () => {
-  console.debug("SIGTERM Received. Closing server");
+const shutdown = () => {
+  console.debug("Closing server");
   server.close(() => {
     console.debug("Service Registry Closed");
   });
-});
+};
+
+process.on("SIGTERM", () => shutdown());
+process.on("SIGINT", () => shutdown());
