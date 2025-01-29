@@ -1,7 +1,20 @@
 {
+  "name": "microservice-service-registry",
+  "version": "1.0.0",
+  "description": "A project showing the example of a Service Registry Microservice",
+  "main": "src/index.ts",
+  "author": "Justin Pallansch",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jpal91/microservice-service-registry"
+  },
   "scripts": {
+    "run": "tsx src/index.ts",
     "test": "jest --silent",
-    "test:verbose": "jest"
+    "test:verbose": "jest",
+    "benches": "./benches -f bench-out.txt"
   },
   "devDependencies": {
     "@tsconfig/node22": "^22.0.0",
