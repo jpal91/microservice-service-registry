@@ -51,6 +51,7 @@ const createApi = (registry: ServiceRegistry) => {
       const errors = validationResult(req);
 
       if (!errors.isEmpty()) {
+        console.debug(errors.array());
         return sendResponse(
           res,
           400,
