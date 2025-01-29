@@ -33,12 +33,12 @@ export interface Instance {
   created: number;
   lastUpdated: number;
   healthy: boolean;
-  meta: Record<string, any>;
+  meta?: Record<string, any>;
 }
 
 export type InstanceRegisterRequest = Pick<
   Instance,
-  "serviceType" | "port" | "meta"
+  "serviceType" | "port" | "meta" | "host"
 >;
 
 /**
@@ -160,7 +160,7 @@ class ServiceRegistry<
 
   healthCheckTimeout: NodeJS.Timeout | undefined;
 
-  private disposed = false;
+  private disposed = true;
   private registrationKey: string;
 
   /**
@@ -196,9 +196,11 @@ class ServiceRegistry<
    */
   init() {
     if (!this.disposed) return;
+    this.disposed = false;
     this.log.info("Creating new service registry");
 
     this.on("instanceRegistered", (instance: Instance) => {
+      this.log.debug("instanceRegistered fired");
       if (!this.serviceMap.has(instance.serviceType)) {
         this.serviceMap.set(instance.serviceType, new Set());
       }
@@ -208,11 +210,20 @@ class ServiceRegistry<
     });
 
     this.on("instanceRemoved", (instance: Instance) => {
-      this.serviceMap.get(instance.serviceType)?.delete(instance.id);
+      this.log.debug("instanceRemoved fired");
+      const services = this.serviceMap.get(instance.serviceType);
+
+      services?.delete(instance.id);
+
+      if (services && services.size === 0) {
+        this.serviceMap.delete(instance.serviceType);
+      }
+
       this.instanceMap.delete(instance.id);
     });
 
     this.on("healthCheckFailed", (instance: Instance) => {
+      this.log.debug("healthCheckFailed fired");
       // Only updates associated maps if status has changed
       if (!instance.healthy) return;
 
@@ -222,6 +233,7 @@ class ServiceRegistry<
     });
 
     this.on("healthCheckPassed", (instance: Instance) => {
+      this.log.debug("healthCheckPassed fired");
       // Only updates associated maps if status has changed
       if (instance.healthy) return;
 
@@ -301,10 +313,7 @@ class ServiceRegistry<
    * @param instance - New instance data
    * @fires instanceRegistered
    */
-  register(
-    instance: InstanceRegisterRequest & { host: string },
-    registrationKey: string,
-  ) {
+  register(instance: InstanceRegisterRequest, registrationKey: string) {
     if (this.disposed) {
       throw new Error("ServiceRegistry has been disposed");
     }
@@ -385,6 +394,8 @@ class ServiceRegistry<
     } catch (error) {
       this.log.error(`Health check error ${error}`);
     } finally {
+      if (!this.healthChecks) return;
+
       this.healthCheckTimeout = setTimeout(
         () => this.runHealthChecks(),
         this.healthCheckInterval,

@@ -42,7 +42,10 @@ const validateRegistration = [
 app.post(
   "/register",
   validateRegistration,
-  (req: Request<{}, any, InstanceRegisterRequest>, res: Response) => {
+  (
+    req: Request<{}, any, Omit<InstanceRegisterRequest, "host">>,
+    res: Response,
+  ) => {
     const authHeader = req.headers.authorization;
     const registrationKey = authHeader?.startsWith("Bearer ")
       ? authHeader.substring(7)
