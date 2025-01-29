@@ -18,7 +18,7 @@ const createApi = (registry: ServiceRegistry) => {
   const app = express();
   const authenticateService = _as(registry);
 
-  app.use(morgan("combined"));
+  process.env.NODE_ENV !== "bench" && app.use(morgan("combined"));
   app.use(express.json());
   app.use(helmet(helmetOpts));
 
