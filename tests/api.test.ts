@@ -1,6 +1,7 @@
 import request from "supertest";
 import createApi from "@app/api";
 import ServiceRegistry, { type Instance } from "@app/service-registry";
+import type { Express } from "express";
 
 process.env.SERVICE_REGISTRATION_KEY = "abc123";
 
@@ -125,5 +126,77 @@ describe("DELETE service/:id", () => {
 
     const unregistered = registry.getInstanceById(serviceId);
     expect(unregistered).toBeUndefined();
+  });
+});
+
+describe("/admin", () => {
+  let registry: ServiceRegistry;
+  let app: Express;
+  process.env.ADMIN_API_KEY = "abc123";
+
+  const processExit = global.process.exit;
+  const processEmit = global.process.emit;
+
+  beforeEach(() => {
+    registry = new ServiceRegistry({ healthChecks: false });
+    app = createApi(registry);
+
+    global.process.emit = jest.fn();
+    global.process.exit = jest.fn() as never;
+
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    global.process.emit = processEmit;
+    global.process.exit = processExit;
+
+    jest.useRealTimers();
+    registry.dispose();
+  });
+
+  test("they need admin keys", async () => {
+    await request(app).get("/admin/health").expect(401);
+    await request(app).get("/admin/shutdown").expect(401);
+  });
+
+  test("it returns health check", async () => {
+    await request(app)
+      .get("/admin/health")
+      .set("x-admin-key", "abc123")
+      .expect(200)
+      .then((res) => {
+        const data = res.body.data;
+        expect(data).toBeDefined();
+        expect(data.status).toBe("UP");
+      });
+  });
+
+  test("it shuts down and forces exit if timeout occurs", async () => {
+    await request(app)
+      .post("/admin/shutdown")
+      .set("x-admin-key", "abc123")
+      .expect(200);
+
+    expect(global.process.emit).toHaveBeenCalledWith("SIGTERM");
+
+    jest.advanceTimersByTime(10000);
+
+    expect(global.process.exit).toHaveBeenCalledWith(1);
+  });
+
+  test("it handles shutdown errors", async () => {
+    const originalDispose = registry.dispose;
+    registry.dispose = jest.fn(() => {
+      throw new Error();
+    });
+
+    await request(app)
+      .post("/admin/shutdown")
+      .set("x-admin-key", "abc123")
+      .expect(500);
+
+    expect(global.process.exit).toHaveBeenCalledWith(1);
+    registry.dispose = originalDispose;
   });
 });

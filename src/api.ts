@@ -131,6 +131,7 @@ const createApi = (registry: ServiceRegistry) => {
   adminRouter.post("/shutdown", (req: Request, res: Response) => {
     try {
       registry.dispose();
+      sendResponse(res, 200);
       process.emit("SIGTERM");
 
       setTimeout(() => {
@@ -139,6 +140,12 @@ const createApi = (registry: ServiceRegistry) => {
       }, 10000);
     } catch (error) {
       console.error("Error during shutdown", error);
+      sendResponse(
+        res,
+        500,
+        null,
+        error instanceof Error ? error.message : "Unknown shutdown error",
+      );
       process.exit(1);
     }
   });
