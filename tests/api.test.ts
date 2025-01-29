@@ -105,3 +105,25 @@ describe("GET /service/:id", () => {
       .expect(200, done);
   });
 });
+
+describe("DELETE service/:id", () => {
+  const { serviceId, token } = registry.register(
+    { serviceType: "orders", port: "3002", host: "localhost" },
+    "abc123",
+  );
+
+  test("it needs token and id", (done) => {
+    request(app).get(`/service/${serviceId}`).expect(401, done);
+  });
+
+  test("it unregisters a service", async () => {
+    await request(app)
+      .delete(`/service/${serviceId}`)
+      .set("x-service-id", serviceId)
+      .set("x-service-token", token)
+      .expect(200);
+
+    const unregistered = registry.getInstanceById(serviceId);
+    expect(unregistered).toBeUndefined();
+  });
+});
